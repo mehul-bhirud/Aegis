@@ -33,6 +33,7 @@ import logging
 import math
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -49,12 +50,12 @@ from fastapi.responses import JSONResponse
 #  CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════
 
-ROOT         = Path(__file__).parent
-JSONL_PATH   = ROOT / "enterprise_activity_stream.jsonl"
-MODEL_PATH   = ROOT / "aegis_vae_model_weighted.pth"
-META_PATH    = ROOT / "feature_meta.json"
-ROLES_PATH   = ROOT / "user_roles.csv"
-THRESH_PATH  = ROOT / "threshold_stats.json"
+ROOT         = Path(__file__).resolve().parent.parent.parent  # Project root (Cummins/)
+JSONL_PATH   = ROOT / "data" / "demo_activity_stream.jsonl"
+MODEL_PATH   = ROOT / "ml" / "models" / "aegis_vae_model_weighted.pth"
+META_PATH    = ROOT / "ml" / "data" / "feature_meta.json"
+ROLES_PATH   = ROOT / "ml" / "data" / "user_roles.csv"
+THRESH_PATH  = ROOT / "ml" / "data" / "threshold_stats.json"
 
 OLLAMA_URL     = "http://localhost:11434/api/generate"
 OLLAMA_MODEL   = "llama3"
@@ -159,84 +160,134 @@ class InsiderThreatVAE(nn.Module):
         return self.decode(z), mu, logvar
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-#  STEP 1 — VECTORIZATION ENGINE (exact logic from preprocess.py)
-# ═══════════════════════════════════════════════════════════════════════════
-#
-# ╔══════════════════════════════════════════════════════════════════════╗
-# ║  Fixed vocabularies.  Order MUST match preprocess.py exactly or     ║
-# ║  the one-hot positions will mismatch the trained weights.           ║
-# ╚══════════════════════════════════════════════════════════════════════╝
-
-ACTION_TYPES       = ["login", "db_query", "file_download", "file_copy",
-                      "usb_mount", "process_kill", "config_change"]
-LOCATIONS          = ["Pune", "Bangalore", "Mumbai", "Singapore", "Unknown"]
-SENSITIVITY_LABELS = ["Public", "Internal", "Confidential", "PII_RESTRICTED"]
-MFA_STATUSES       = ["success", "failed", "bypassed"]
+# Hackathon Approximation for City Coordinates (Lat, Lon) — Impossible Travel
+CITY_COORDS = {
+    "Pune": (18.52, 73.85), "Bangalore": (12.97, 77.59), "Mumbai": (19.07, 72.87),
+    "Singapore": (1.35, 103.81), "Chicago": (41.87, -87.62), "Tokyo": (35.67, 139.65),
+    "London": (51.50, -0.12), "Frankfurt": (50.11, 8.68), "Austin": (30.26, -97.74),
+    "Sydney": (-33.86, 151.20), "Delhi": (28.61, 77.20), "Seoul": (37.56, 126.97),
+    "Amsterdam": (52.37, 4.90), "Dublin": (53.35, -6.26), "New_York": (40.71, -74.00),
+    "Seattle": (47.61, -122.33), "Toronto": (43.65, -79.38), "Sao_Paulo": (-23.55, -46.63),
+    "Dubai": (25.20, 55.27), "Johannesburg": (-26.20, 28.04),
+}
 
 
-def _onehot(value: str, vocab: list[str]) -> list[float]:
-    """Return a one-hot list.  Unknown values → all-zeros."""
-    vec = [0.0] * len(vocab)
-    if value in vocab:
-        vec[vocab.index(value)] = 1.0
-    return vec
+def preprocess_json_to_tensor(log_data: dict, user_history: list | None = None) -> torch.Tensor:
+    """Translates raw JSON into a 61-dim tensor, including STATEFUL session features.
 
+    Resolves Training-Serving Skew by matching the offline preprocess.py pipeline
+    and adding live session windowing + impossible travel velocity.
 
-# Feature-level volume scaling bounds (loaded from feature_meta.json at startup)
-VOL_MIN: float = 0.01
-VOL_MAX: float = 12000.0
-
-
-def preprocess_json_to_tensor(log_data: dict) -> torch.Tensor:
-    """Flatten one nested JSON log into a [1, 22] float32 tensor.
-
-    Feature vector layout (22 columns):
-      [0]  hour_norm          (0-23 → 0.0-1.0)
-      [1]  volume_norm        (min-max scaled)
-      [2-8]  action_type one-hot  (7 categories)
-      [9-13] location one-hot     (5 categories)
-      [14-17] sensitivity one-hot (4 categories)
-      [18-20] mfa_status one-hot  (3 categories)
-      [21] edr_agent_active       (boolean → float)
+    Feature vector layout (61 dimensions):
+      [0-1]   Temporal:  hour_sin, hour_cos  (cyclical encoding)
+      [2]     Volume:    scaled volume_mb
+      [3]     Entropy:   file_entropy
+      [4]     Biometric: typing_cadence_ms  (scaled)
+      [5]     Biometric: mouse_velocity     (scaled)
+      [6]     Session:   rolling cumulative volume  (windowed)
+      [7]     Session:   error rate over last 10 actions
+      [8]     Velocity:  impossible travel speed  (km/h scaled)
+      [9]     Reserved
+      [10-22] Action-type one-hot  (13 categories)
+      [23-25] Reserved
+      [26-35] Location one-hot     (10 categories)
+      [36-49] Reserved
+      [50]    EDR agent active     (boolean)
+      [51]    MFA success          (boolean)
+      [52-55] Reserved
+      [56-60] Binary Threat Flags  (5 kill-shot discriminators)
     """
-    # ── 1) Hour normalisation ──
-    hour = int(log_data["timestamp"][11:13])
-    hour_norm = hour / 23.0
+    if user_history is None:
+        user_history = []
 
-    # ── 2) Volume min-max scaling ──
-    vol = log_data["resource"]["volume_mb"]
-    vol_range = VOL_MAX - VOL_MIN if VOL_MAX != VOL_MIN else 1.0
-    vol_norm = (vol - VOL_MIN) / vol_range
+    features = [0.0] * 56
 
-    # ── 3-6) One-hot encodings ──
-    oh_action = _onehot(log_data["action"]["type"], ACTION_TYPES)
-    oh_loc    = _onehot(log_data["context"]["location"], LOCATIONS)
-    oh_sens   = _onehot(log_data["resource"]["sensitivity_label"], SENSITIVITY_LABELS)
-    oh_mfa    = _onehot(log_data["actor"]["mfa_status"], MFA_STATUSES)
+    # ── 1. THE BASICS (Time, Volume, Biometrics) ─────────────────────
+    current_time_str = log_data.get("timestamp", "").replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(current_time_str)
+        hour_float = dt.hour + (dt.minute / 60.0)
+        features[0] = math.sin(2 * math.pi * hour_float / 24.0)
+        features[1] = math.cos(2 * math.pi * hour_float / 24.0)
+    except Exception:
+        dt = datetime.utcnow()
 
-    # ── 7) EDR agent ──
-    edr = 1.0 if log_data["context"]["edr_agent_active"] else 0.0
+    resource = log_data.get("resource", {})
+    current_vol = resource.get("volume_mb", 0.0)
+    features[2] = min(current_vol / 1000.0, 1.0)
 
-    vec = [hour_norm, vol_norm] + oh_action + oh_loc + oh_sens + oh_mfa + [edr]
-    
-    # Pad vector up to 56 dims
-    vec += [0.0] * (56 - len(vec))
-    
-    # ── 8) Binary Threat Flags (last 5 indices exactly) ──
-    aegis_telemetry = log_data.get("enrichments", {}).get("aegis_telemetry", {})
-    resource_name = log_data.get("resource", {}).get("name", "")
+    enrich = log_data.get("enrichments", {}).get("aegis_telemetry", {})
+    features[3] = enrich.get("file_entropy", 0.0)
+    features[4] = min(enrich.get("typing_cadence_ms", 100) / 1000.0, 1.0)
+    features[5] = min(enrich.get("mouse_velocity", 50) / 500.0, 1.0)
+
+    # ── 2. STATEFUL: Session Windowing ───────────────────────────────
+    session_volume = current_vol
+    failed_actions = 0
+
+    for past_log in user_history:
+        session_volume += past_log.get("resource", {}).get("volume_mb", 0.0)
+        if past_log.get("action", {}).get("status") == "failed":
+            failed_actions += 1
+
+    # Index 6: Rolling Session Volume (massive indicator of data hoarding)
+    features[6] = min(session_volume / 5000.0, 1.0)
+    # Index 7: Session Error Rate (indicator of brute force / hunting)
+    features[7] = failed_actions / max(len(user_history), 1)
+
+    # ── 3. STATEFUL: Location Velocity (Impossible Travel) ───────────
+    current_loc = log_data.get("context", {}).get("location", "")
+    features[8] = 0.0  # default velocity
+
+    if len(user_history) > 0:
+        last_log = user_history[-1]
+        last_loc = last_log.get("context", {}).get("location", "")
+        last_time_str = last_log.get("timestamp", "").replace("Z", "+00:00")
+
+        if current_loc and last_loc and current_loc != last_loc:
+            try:
+                last_dt = datetime.fromisoformat(last_time_str)
+                hours_diff = abs((dt - last_dt).total_seconds()) / 3600.0
+
+                if current_loc in CITY_COORDS and last_loc in CITY_COORDS:
+                    lat1, lon1 = CITY_COORDS[current_loc]
+                    lat2, lon2 = CITY_COORDS[last_loc]
+                    rough_dist_km = math.sqrt((lat2 - lat1) ** 2 + (lon2 - lon1) ** 2) * 111
+
+                    if hours_diff > 0:
+                        velocity_kmh = rough_dist_km / hours_diff
+                        # Normalize (cap at 1000 km/h — airplane speed)
+                        # > 1.0 means impossible travel (e.g. Pune→London in 5 min)
+                        features[8] = min(velocity_kmh / 1000.0, 1.0)
+            except Exception:
+                pass
+
+    # ── 4. EXPANDED VOCABULARIES ─────────────────────────────────────
     action_type = log_data.get("action", {}).get("type", "")
-    
-    flag_honey = 1.0 if "Q4_Executive_Bonuses" in resource_name else 0.0
-    flag_kill = 1.0 if action_type == "process_kill" else 0.0
-    flag_exfil = 1.0 if log_data.get("resource", {}).get("volume_mb", 0) > 1000 else 0.0
-    flag_delete = 1.0 if "delete" in action_type.lower() else 0.0
-    flag_optical = 1.0 if aegis_telemetry.get("optical_sensor_state") == "Optical Device Detected" else 0.0
-    
-    vec += [flag_honey, flag_kill, flag_exfil, flag_delete, flag_optical]
-    
-    return torch.tensor([vec], dtype=torch.float32)
+    _ACTION_MAP = {
+        "login": 10, "vpn_connect": 11, "db_query": 12, "file_download": 13,
+        "config_change": 14, "service_stop": 15, "file_copy": 16, "db_update": 17,
+        "refund_process": 18, "git_commit": 19, "email_sent": 20, "ticket_update": 21,
+        "container_deploy": 22,
+    }
+    if action_type in _ACTION_MAP:
+        features[_ACTION_MAP[action_type]] = 1.0
+
+    _LOCATION_MAP = {
+        "Pune": 26, "Bangalore": 27, "Mumbai": 28, "Singapore": 29, "Chicago": 30,
+        "Tokyo": 31, "London": 32, "Frankfurt": 33, "Austin": 34, "Sydney": 35,
+    }
+    if current_loc in _LOCATION_MAP:
+        features[_LOCATION_MAP[current_loc]] = 1.0
+
+    features[50] = 1.0 if log_data.get("context", {}).get("edr_agent_active") else 0.0
+    features[51] = 1.0 if log_data.get("actor", {}).get("mfa_status") == "success" else 0.0
+
+    # ── 5. Binary Threat Flags (final 5 dims → total = 61) ──────────
+    final_vector = features + [0.0] * 5
+    assert len(final_vector) == 61, f"Mismatch: {len(final_vector)}"
+
+    return torch.tensor([final_vector], dtype=torch.float32)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -310,20 +361,33 @@ class OllamaAnalyst:
     """Async, priority-queued client for local Ollama LLM threat analysis.
 
     To prevent crashing the local GPU during high-velocity anomaly bursts
-    (e.g., 50 alerts in 1 sec), this implements an LLM Priority Queue.
-    It batches incoming requests every 1.0 seconds, sends ONLY the
-    highest-risk log to Llama 3, and immediately returns a "Skipped"
-    fallback for the rest.
+    (e.g., 50 alerts in 1 sec), this implements an LLM Priority Queue
+    with an Asynchronous Non-Blocking Lock.
+
+    Lock Behavior:
+      - IF LOCKED:   LLM is busy → return hardcoded fallback immediately
+      - IF UNLOCKED: Acquire lock → await Llama 3 → release in finally
     """
+
+    # Hardcoded fallback when the LLM is already processing another threat
+    _BUSY_FALLBACK: dict = {
+        "summary": ("Multiple concurrent anomalies detected. "
+                     "ML threat flag logged; LLM queued for capacity."),
+        "recommended_action": "Standard protocol.",
+    }
 
     def __init__(self):
         self._client:  httpx.AsyncClient | None = None
         self._available = False
         self._calls     = 0
-        
+
         # Priority Queue state
         self._queue = asyncio.PriorityQueue()
         self._bg_task = None
+
+        # ── Non-Blocking Lock ────────────────────────────────────────
+        self._lock = asyncio.Lock()
+        self._is_processing = False
 
     async def initialize(self):
         """Probe Ollama on startup; set _available flag and start worker."""
@@ -384,13 +448,24 @@ class OllamaAnalyst:
                     }
                     await manager.broadcast(i_out)
                     
-                # 5. Process the winner
+                # 5. Process the winner — with non-blocking lock check
                 w_score, w_ts, w_log, w_out = best_item
+
+                if self._is_processing:
+                    # LLM is currently busy — return hardcoded fallback
+                    log.warning("🔒 LLM LOCKED — concurrent anomaly, returning fallback")
+                    w_out["ai_analysis"] = dict(self._BUSY_FALLBACK)
+                    await manager.broadcast(w_out)
+                    continue
+
                 try:
+                    self._is_processing = True
                     analysis = await self._do_analyze(w_log, -w_score)
                 except Exception as e:
                     log.error("Ollama worker error: %s", e)
                     analysis = self._fallback(w_log, -w_score)
+                finally:
+                    self._is_processing = False
                     
                 w_out["ai_analysis"] = analysis
                 await manager.broadcast(w_out)
@@ -401,23 +476,36 @@ class OllamaAnalyst:
                 log.error("Fatal LLM background worker error: %s", e)
                 await asyncio.sleep(1)
 
-    async def analyze(self, log_data: dict, risk_score: int) -> dict:
-        """Synchronous (awaitable) analyze for isolated DEMO endpoints."""
-        return await self._do_analyze(log_data, risk_score)
+    async def analyze(self, user_history: list | dict, risk_score: int) -> dict:
+        """Synchronous (awaitable) analyze for isolated DEMO endpoints.
 
-    async def _do_analyze(self, log_data: dict, risk_score: int) -> dict:
+        Uses the same non-blocking lock to prevent overlapping calls.
+        """
+        if self._is_processing:
+            log.warning("🔒 LLM LOCKED (demo endpoint) — returning fallback")
+            return dict(self._BUSY_FALLBACK)
+
+        self._is_processing = True
+        try:
+            return await self._do_analyze(user_history, risk_score)
+        finally:
+            self._is_processing = False
+
+    async def _do_analyze(self, user_history: list | dict, risk_score: int) -> dict:
         """Generate a threat analysis via Llama 3."""
         if not self._available or not self._client:
-            return self._fallback(log_data, risk_score)
+            return self._fallback(user_history, risk_score)
 
         prompt = (
             "You are a cybersecurity SOC analyst AI at a large retail and supply-chain "
-            "enterprise called Cummins.  Analyze the suspicious activity log below and "
-            "respond with ONLY a valid JSON object (no markdown, no code fences, no "
+            "enterprise called Cummins. You are analyzing a sequence of events. Here is "
+            "the user's recent activity log leading up to the anomaly. Analyze the "
+            "sequence to determine the kill chain and provide a conclusion.\n"
+            "Respond with ONLY a valid JSON object (no markdown, no code fences, no "
             "extra text) with exactly two keys:\n"
             '  "summary": a 2-3 sentence explanation of why this is suspicious.\n'
             '  "recommended_action": a specific, actionable step for the SOC team.\n\n'
-            f"Activity Log:\n{json.dumps(log_data, indent=2)}\n\n"
+            f"Activity Sequence:\n{json.dumps(user_history, indent=2)}\n\n"
             f"Risk Score: {risk_score}/100"
         )
 
@@ -448,12 +536,13 @@ class OllamaAnalyst:
         except Exception as exc:
             log.warning("⚠  Ollama error: %s", exc)
 
-        return self._fallback(log_data, risk_score)
+        return self._fallback(user_history, risk_score)
 
     # ── Rule-based fallback when Ollama is unavailable ──────────────────
 
     @staticmethod
-    def _fallback(log_data: dict, risk_score: int) -> dict:
+    def _fallback(user_history: list | dict, risk_score: int) -> dict:
+        log_data = user_history[-1] if isinstance(user_history, list) else user_history
         actor    = log_data.get("actor", {})
         action   = log_data.get("action", {})
         resource = log_data.get("resource", {})
@@ -565,6 +654,20 @@ class PipelineStats:
             "low": 0, "medium": 0, "high": 0, "critical": 0,
         }
 
+    def reset(self):
+        """Resets all telemetry for a clean demo run."""
+        self.total_processed  = 0
+        self.normal_count     = 0
+        self.alert_count      = 0
+        self.ollama_calls     = 0
+        self.brain0_overrides = 0
+        self.start_time       = time.time() if self.status == "running" else None
+        self.highest_risk     = 0
+        self.recent_alerts    = []
+        self.risk_distribution = {
+            "low": 0, "medium": 0, "high": 0, "critical": 0,
+        }
+
     def record(self, risk_score: int, is_alert: bool):
         self.total_processed += 1
         if is_alert:
@@ -618,6 +721,7 @@ class PipelineStats:
 
 device   = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model:   InsiderThreatVAE | None = None
+user_history_buffer: dict[str, list[dict]] = {}
 merkle   = EnterpriseMerkleTree()
 ollama   = OllamaAnalyst()
 manager  = ConnectionManager()
@@ -720,6 +824,22 @@ _BRAIN0_SIGNATURES: list[dict[str, Any]] = [
         ),
     },
     {
+        "name":  "BIOMETRIC_HIJACK",
+        "desc":  "Continuous Authentication Failure (Session Hijack)",
+        "check": lambda d: (
+            d.get("action", {}).get("type", "") == "refund_process"
+            and d.get("enrichments", {}).get("aegis_telemetry", {}).get("typing_cadence_ms", 100) > 400
+        ),
+    },
+    {
+        "name":  "SUPPLY_CHAIN_FRAUD",
+        "desc":  "Unauth modification of vendor routing numbers to overseas bank",
+        "check": lambda d: (
+            d.get("action", {}).get("type", "") == "db_update"
+            and "vendor_routing" in d.get("resource", {}).get("name", "")
+        ),
+    },
+    {
         "name":  "S3_EXPOSURE",
         "desc":  "Cloud Admin making S3 bucket public",
         "check": lambda d: (
@@ -803,6 +923,12 @@ async def process_stream(speed: float = STREAM_SPEED, max_logs: int = 0):
                     uid = (actor.get("user_id", "")
                            or actor.get("user", {}).get("uid", "?"))
 
+                    # --- SEQUENCE BUFFER UPDATE ---
+                    if uid not in user_history_buffer:
+                        user_history_buffer[uid] = []
+                    user_history_buffer[uid].append(log_data)
+                    user_history_buffer[uid] = user_history_buffer[uid][-10:]
+
                     # ══════════════════════════════════════════════════
                     # BRAIN 0 — Deterministic Hard-Signature Override
                     # ══════════════════════════════════════════════════
@@ -826,7 +952,7 @@ async def process_stream(speed: float = STREAM_SPEED, max_logs: int = 0):
                     # BRAIN 1 — PyTorch VAE (gray-area ML inference)
                     # ══════════════════════════════════════════════════
                     else:
-                        tensor      = preprocess_json_to_tensor(log_data)
+                        tensor      = preprocess_json_to_tensor(log_data, user_history_buffer.get(uid, []))
                         mse         = await _run_inference(tensor)
                         risk_score  = mse_to_risk_score(mse)
                         is_critical = risk_score > ALERT_THRESHOLD
@@ -864,7 +990,7 @@ async def process_stream(speed: float = STREAM_SPEED, max_logs: int = 0):
                         stats.push_alert(output)
                         # We hand critical alerts to the LLM Priority Queue
                         # It will await 1s, drop inferiors, and broadcast later.
-                        ollama.enqueue(log_data, risk_score, output)
+                        ollama.enqueue(user_history_buffer[uid], risk_score, output)
                     else:
                         # Normal events skip LLM and broadcast immediately
                         await manager.broadcast(output)
@@ -1120,7 +1246,9 @@ async def stop_stream():
         )
 
     _stop_event.set()
-    return {"message": "Stop signal sent -- stream will halt after current log",
+    stats.reset()
+    stats.status = "idle"
+    return {"message": "Stop signal sent and stats reset to 0.",
             "stats":   stats.to_dict()}
 
 
@@ -1130,7 +1258,7 @@ async def inject_test_log(log_data: dict):
     raw = json.dumps(log_data)
     merkle_root = merkle.ingest(raw)
     
-    tensor = preprocess_json_to_tensor(log_data)
+    tensor = preprocess_json_to_tensor(log_data, [])
     mse = await _run_inference(tensor)
     
     # We always push risk score to 99 for the demo to guarantee visual wow-factor

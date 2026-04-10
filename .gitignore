@@ -1,17 +1,36 @@
-# Ignore large datasets limit for Github (300+ MB)
-enterprise_activity_stream.jsonl
-test_anomalies.jsonl
+# ═══════════════════════════════════════════════════
+#  AEGIS-FUSION .gitignore
+# ═══════════════════════════════════════════════════
 
-# Python cache
+# ── Large Data Files (exceed GitHub 100MB limit) ──
+data/enterprise_activity_stream.jsonl
+data/test_anomalies.jsonl
+
+# ── Python ──
 __pycache__/
 *.pyc
-
-# Local environments
+*.pyo
 .env
 .venv/
 env/
 venv/
 
-# PyTorch models
-*.pt
-*.pth
+# ── PyTorch artifacts ──
+ml/models/*.pth
+ml/data/*.pt
+
+# ── Node / Next.js ──
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# ── IDE ──
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── OS junk ──
+.DS_Store
+Thumbs.db
+desktop.ini
