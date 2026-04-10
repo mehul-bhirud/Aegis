@@ -608,6 +608,7 @@ class PipelineStats:
             "risk_distribution":   self.risk_distribution,
             "uptime_s":            round(time.time() - self.start_time, 1)
                                    if self.start_time else 0,
+            "merkle_root":         merkle.root,
         }
 
 
@@ -1166,6 +1167,29 @@ async def inject_test_log(log_data: dict):
     stats.record(risk_score, is_alert=True)
     
     return {"message": "Demo log injected successfully", "payload": output}
+
+
+@app.post("/api/tamper", tags=["Stream Control"])
+async def trigger_tamper():
+    """Hackathon Mic Drop Feature: Shatter the merkle chain live."""
+    # 1. Artificially corrupt the global Merkle root
+    merkle._root = "0000000_CORRUPTED_TAMPER_DETECTED_0000000"
+    
+    # 2. Build the visual payload
+    payload = {
+        "event_type": "tamper_alert",
+        "merkle_integrity": "COMPROMISED",
+        "merkle_root": "CHAIN_BROKEN",
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    
+    # 3. Log it brilliantly
+    log.critical("🚨 🚨 🚨 MERKLE LEDGER SHATTERED 🚨 🚨 🚨")
+    log.critical("Manual /api/tamper injected.")
+    
+    # 4. Broadcast immediately
+    await manager.broadcast(payload)
+    return {"message": "Tamper simulation triggered successfully."}
 
 
 # ── WebSocket Endpoint ────────────────────────────────────────────────────
