@@ -1,0 +1,17 @@
+# Ignore large datasets limit for Github (300+ MB)
+enterprise_activity_stream.jsonl
+test_anomalies.jsonl
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local environments
+.env
+.venv/
+env/
+venv/
+
+# PyTorch models
+*.pt
+*.pth

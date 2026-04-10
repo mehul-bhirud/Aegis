@@ -1,0 +1,436 @@
+{
+  "num_features": 61,
+  "feature_names": [
+    "hour_sin_mean",
+    "hour_sin_std",
+    "hour_cos_mean",
+    "hour_cos_std",
+    "session_duration_s",
+    "log_count",
+    "delta_s_mean",
+    "delta_s_std",
+    "delta_s_min",
+    "delta_s_max",
+    "velocity_lps",
+    "volume_mb_sum",
+    "volume_mb_max",
+    "volume_mb_mean",
+    "act_login_mean",
+    "act_vpn_connect_mean",
+    "act_db_query_mean",
+    "act_file_download_mean",
+    "act_file_copy_mean",
+    "act_config_change_mean",
+    "act_usb_mount_mean",
+    "act_mfa_enroll_mean",
+    "act_record_delete_mean",
+    "act_permission_change_mean",
+    "act_process_kill_mean",
+    "grp_Junior_Marketing_max",
+    "grp_Senior_Marketing_max",
+    "grp_Warehouse_Floor_max",
+    "grp_Cloud_Admin_max",
+    "grp_IT_Support_max",
+    "grp_Corporate_Finance_max",
+    "grp_Corporate_HR_max",
+    "grp_Supply_Chain_Ops_max",
+    "grp_Retail_Store_Ops_max",
+    "grp_Data_Analytics_max",
+    "grp_Legal_Compliance_max",
+    "grp_Executive_Leadership_max",
+    "sens_Public_mean",
+    "sens_Internal_mean",
+    "sens_Confidential_mean",
+    "sens_PII_RESTRICTED_mean",
+    "loc_Pune_mean",
+    "loc_Bangalore_mean",
+    "loc_Mumbai_mean",
+    "loc_Singapore_mean",
+    "loc_Unknown_mean",
+    "mfa_success_mean",
+    "mfa_failed_mean",
+    "mfa_bypassed_mean",
+    "file_entropy_max",
+    "file_entropy_mean",
+    "typing_var_mean",
+    "typing_var_max",
+    "optical_det_mean",
+    "edr_off_mean",
+    "action_failed_mean",
+    "flag_honey_token_max",
+    "flag_destructive_action_max",
+    "flag_critical_resource_max",
+    "flag_optical_sensor_max",
+    "flag_high_entropy_max"
+  ],
+  "scaling": {
+    "hour_sin_mean": {
+      "min": -0.9926393628120422,
+      "max": 0.9941557049751282,
+      "range": 1.9867950677871704
+    },
+    "hour_sin_std": {
+      "min": 0.0,
+      "max": 0.4080118238925934,
+      "range": 0.4080118238925934
+    },
+    "hour_cos_mean": {
+      "min": -0.9862856268882751,
+      "max": 0.9640772938728333,
+      "range": 1.9503629207611084
+    },
+    "hour_cos_std": {
+      "min": 0.0,
+      "max": 0.47612226009368896,
+      "range": 0.47612226009368896
+    },
+    "session_duration_s": {
+      "min": 0.0,
+      "max": 14387.9150390625,
+      "range": 14387.9150390625
+    },
+    "log_count": {
+      "min": 1.0,
+      "max": 30.0,
+      "range": 29.0
+    },
+    "delta_s_mean": {
+      "min": 0.0,
+      "max": 3960.312744140625,
+      "range": 3960.312744140625
+    },
+    "delta_s_std": {
+      "min": 0.0,
+      "max": 6142.09716796875,
+      "range": 6142.09716796875
+    },
+    "delta_s_min": {
+      "min": 0.0,
+      "max": 0.0,
+      "range": 0.0,
+      "trap": true
+    },
+    "delta_s_max": {
+      "min": 0.0,
+      "max": 11058.7939453125,
+      "range": 11058.7939453125
+    },
+    "velocity_lps": {
+      "min": 0.0002525052987039089,
+      "max": 1.0,
+      "range": 0.9997474947012961
+    },
+    "volume_mb_sum": {
+      "min": 0.063,
+      "max": 2936.701,
+      "range": 2936.638
+    },
+    "volume_mb_max": {
+      "min": 0.025,
+      "max": 499.982,
+      "range": 499.95700000000005
+    },
+    "volume_mb_mean": {
+      "min": 0.019,
+      "max": 293.561,
+      "range": 293.542
+    },
+    "act_login_mean": {
+      "min": 0.0,
+      "max": 0.8181818127632141,
+      "range": 0.8181818127632141
+    },
+    "act_vpn_connect_mean": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "act_db_query_mean": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "act_file_download_mean": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "act_file_copy_mean": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "act_config_change_mean": {
+      "min": 0.0,
+      "max": 0.75,
+      "range": 0.75
+    },
+    "act_usb_mount_mean": {
+      "min": 0.0,
+      "max": 0.800000011920929,
+      "range": 0.800000011920929
+    },
+    "act_mfa_enroll_mean": {
+      "min": 0.0,
+      "max": 0.75,
+      "range": 0.75
+    },
+    "act_record_delete_mean": {
+      "min": 0.0,
+      "max": 0.0,
+      "range": 0.0,
+      "trap": true
+    },
+    "act_permission_change_mean": {
+      "min": 0.0,
+      "max": 0.0,
+      "range": 0.0,
+      "trap": true
+    },
+    "act_process_kill_mean": {
+      "min": 0.0,
+      "max": 0.0,
+      "range": 0.0,
+      "trap": true
+    },
+    "grp_Junior_Marketing_max": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "grp_Senior_Marketing_max": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "grp_Warehouse_Floor_max": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "grp_Cloud_Admin_max": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "grp_IT_Support_max": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "grp_Corporate_Finance_max": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "grp_Corporate_HR_max": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "grp_Supply_Chain_Ops_max": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "grp_Retail_Store_Ops_max": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "grp_Data_Analytics_max": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "grp_Legal_Compliance_max": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "grp_Executive_Leadership_max": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "sens_Public_mean": {
+      "min": 0.0,
+      "max": 0.6666666865348816,
+      "range": 0.6666666865348816
+    },
+    "sens_Internal_mean": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "sens_Confidential_mean": {
+      "min": 0.0,
+      "max": 0.8333333134651184,
+      "range": 0.8333333134651184
+    },
+    "sens_PII_RESTRICTED_mean": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "loc_Pune_mean": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "loc_Bangalore_mean": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "loc_Mumbai_mean": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "loc_Singapore_mean": {
+      "min": 0.0,
+      "max": 0.8888888955116272,
+      "range": 0.8888888955116272
+    },
+    "loc_Unknown_mean": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "mfa_success_mean": {
+      "min": 0.7142857313156128,
+      "max": 1.0,
+      "range": 0.2857142686843872
+    },
+    "mfa_failed_mean": {
+      "min": 0.0,
+      "max": 0.2857142984867096,
+      "range": 0.2857142984867096
+    },
+    "mfa_bypassed_mean": {
+      "min": 0.0,
+      "max": 0.0,
+      "range": 0.0,
+      "trap": true
+    },
+    "file_entropy_max": {
+      "min": 0.17,
+      "max": 0.65,
+      "range": 0.48
+    },
+    "file_entropy_mean": {
+      "min": 0.08585,
+      "max": 0.6202333333333333,
+      "range": 0.5343833333333333
+    },
+    "typing_var_mean": {
+      "min": 0.07502222222222223,
+      "max": 0.1773,
+      "range": 0.10227777777777779
+    },
+    "typing_var_max": {
+      "min": 0.1075,
+      "max": 0.3812,
+      "range": 0.2737
+    },
+    "optical_det_mean": {
+      "min": 0.0,
+      "max": 0.0,
+      "range": 0.0,
+      "trap": true
+    },
+    "edr_off_mean": {
+      "min": 0.0,
+      "max": 0.0,
+      "range": 0.0,
+      "trap": true
+    },
+    "action_failed_mean": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "flag_honey_token_max": {
+      "min": 0.0,
+      "max": 0.0,
+      "range": 0.0,
+      "trap": true
+    },
+    "flag_destructive_action_max": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "flag_critical_resource_max": {
+      "min": 0.0,
+      "max": 0.0,
+      "range": 0.0,
+      "trap": true
+    },
+    "flag_optical_sensor_max": {
+      "min": 0.0,
+      "max": 0.0,
+      "range": 0.0,
+      "trap": true
+    },
+    "flag_high_entropy_max": {
+      "min": 0.0,
+      "max": 0.0,
+      "range": 0.0,
+      "trap": true
+    }
+  },
+  "total_logs": 500000,
+  "total_sessions": 37200,
+  "train_sessions": 32884,
+  "test_sessions": 4316,
+  "killshot_logs": 5000,
+  "vocabularies": {
+    "action_types": [
+      "login",
+      "vpn_connect",
+      "db_query",
+      "file_download",
+      "file_copy",
+      "config_change",
+      "usb_mount",
+      "mfa_enroll",
+      "record_delete",
+      "permission_change",
+      "process_kill"
+    ],
+    "user_groups": [
+      "Junior_Marketing",
+      "Senior_Marketing",
+      "Warehouse_Floor",
+      "Cloud_Admin",
+      "IT_Support",
+      "Corporate_Finance",
+      "Corporate_HR",
+      "Supply_Chain_Ops",
+      "Retail_Store_Ops",
+      "Data_Analytics",
+      "Legal_Compliance",
+      "Executive_Leadership"
+    ],
+    "locations": [
+      "Pune",
+      "Bangalore",
+      "Mumbai",
+      "Singapore",
+      "Unknown"
+    ],
+    "sensitivity_levels": [
+      "Public",
+      "Internal",
+      "Confidential",
+      "PII_RESTRICTED"
+    ],
+    "mfa_states": [
+      "success",
+      "failed",
+      "bypassed"
+    ]
+  }
+}

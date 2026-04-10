@@ -1,0 +1,15 @@
+{
+  "train_mse_mean": 0.02965894713997841,
+  "train_mse_std": 0.006065414287149906,
+  "train_mse_p50": 0.02780597098171711,
+  "train_mse_p95": 0.040984462946653366,
+  "train_mse_p99": 0.048452675342559814,
+  "test_mse_mean": 0.055006351321935654,
+  "sigmoid_steepness": 2.705006341439209,
+  "sigmoid_center": 2.0960779561181044,
+  "separation_ratio": 1.8546,
+  "input_dim": 61,
+  "latent_dim": 10,
+  "epochs_trained": 75,
+  "best_loss": 0.029652780383940813
+}
